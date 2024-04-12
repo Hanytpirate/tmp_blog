@@ -1,5 +1,4 @@
-.center-h{
-    position: absolute;
-    left: 50%;
-    transform: translateX(-50%);
- }
+.article-img{
+    max-width: 2.5rem;
+    display:inline
+}

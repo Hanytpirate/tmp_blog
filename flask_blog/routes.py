@@ -1,17 +1,25 @@
 import os
 import secrets
 from PIL import Image
-from flask import render_template,url_for,flash,redirect,request, abort
+
+from flask import render_template,url_for,flash,redirect,request, abort,jsonify
 from flask_blog.forms import RegistrationForm,LoginForm,UpdateAccountForm, PostForm
 from flask_blog import app,db,bcrypt
 from flask_blog.models import User,Post
 from flask_login import login_user,current_user,logout_user,login_required
-
+from markdown import markdown
+from markupsafe import Markup
 @app.route("/")
 def home():
     posts = Post.query.all()
+    for post in posts:
+        post.content = md_to_html(post.content)
     return render_template('home.html',posts=posts)
-
+def md_to_html(md):
+    exts = ['markdown.extensions.extra', 'markdown.extensions.codehilite','markdown.extensions.tables','markdown.extensions.toc']
+    html = markdown(md,extensions=exts)
+    content = Markup(html)
+    return content
 @app.route("/about")
 def about_page():
     return render_template('about.html')
@@ -88,18 +96,19 @@ def account():
 @app.route("/post/new", methods=['GET', 'POST'])
 @login_required
 def new_post():
-    form = PostForm()
-    if form.validate_on_submit():
-        post = Post(title=form.title.data, content=form.content.data, author=current_user)
+    title = request.form.get('article_title')
+    content = request.form.get('article-content')
+    if title != None and content != None:
+        post = Post(title=title, content=content, author=current_user)
         db.session.add(post)
         db.session.commit()
         flash('Your post has been created!', 'success')
         return redirect(url_for('home'))
-    return render_template('create_post.html', title='新的文章',
-                           form=form, legend='创建新的文章')
+    return render_template('create_post.html')
 @app.route("/post/<int:post_id>")
 def post(post_id):
     post = Post.query.get_or_404(post_id)
+    post.content = md_to_html(post.content)
     return render_template('post.html', title=post.title, post=post)
 
 
@@ -109,18 +118,19 @@ def update_post(post_id):
     post = Post.query.get_or_404(post_id)
     if post.author != current_user:
         abort(403)
-    form = PostForm()
-    if form.validate_on_submit():
-        post.title = form.title.data
-        post.content = form.content.data
+    
+    if request.args.get('have')=="true":
+        return jsonify({'title':post.title,'content':post.content})
+    title = request.form.get('article_title')
+    content = request.form.get('article-content')
+    if title != None and content != None:
+        post.title = title
+        post.content = content
         db.session.commit()
         flash('Your post has been updated!', 'success')
         return redirect(url_for('post', post_id=post.id))
-    elif request.method == 'GET':
-        form.title.data = post.title
-        form.content.data = post.content
-    return render_template('create_post.html', title='更新文章',
-                           form=form, legend='更新文章')
+    return render_template('create_post.html', title='更新文章')
+
 @app.route("/post/<int:post_id>/delete", methods=['POST'])
 @login_required
 def delete_post(post_id):
